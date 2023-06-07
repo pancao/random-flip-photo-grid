@@ -1,44 +1,29 @@
 <template>
   <div class="container" :style="{ '--item-size': itemSize + 'px' }">
     <div
-      v-for="(color, index) in colors"
-      :key="index"
-      ref="gridItems"
+      v-for="(image, index) in displayedImages"
+      :key="image.id"
+      ref="gridItemRefs"
       class="grid-item"
     >
-      <div class="front" :style="{ backgroundColor: color }"></div>
-      <div class="back" :style="{ backgroundColor: color }"></div>
+      <div class="front" :style="{ backgroundImage: 'url(' + image + ')' }"></div>
+      <div class="back" :style="{ backgroundImage: 'url(' + image + ')' }"></div>
     </div>
   </div>
 </template>
 
-
 <script lang="ts">
 import { ref, onMounted, onBeforeUnmount, onUpdated, nextTick } from "vue";
+import supabase from "../supabase.js";
 
 export default {
   setup() {
-    const colors = ref<string[]>([]);
+    const displayedImages = ref<{id: string, url: string}[]>([]);
+    const pendingImages = ref<string[]>([]);
     const itemSize = ref(100);
-    const intervals = ref<number[]>([]);
     const gridItems = ref([]);
-    onUpdated(() => {
-      gridItems.value = document.querySelectorAll('.grid-item');
-    });
-
-    const generateRandomColor = () =>
-      "#" + Math.floor(Math.random() * 16777215).toString(16);
-
-    const generateColors = () => {
-      const xCount = Math.floor(window.innerWidth / itemSize.value);
-      const yCount = Math.floor(window.innerHeight / itemSize.value) + 1;
-      
-      const count = xCount * yCount;
-
-      for (let i = 0; i < count; i++) {
-        colors.value.push(generateRandomColor());
-      }
-    };
+    const gridItemRefs = ref([]);
+    const timeouts = ref<number[]>([]);
 
     const updateSize = () => {
       let potentialSize = 320;
@@ -46,71 +31,202 @@ export default {
         potentialSize--;
       }
       itemSize.value = potentialSize;
-      colors.value = [];
-      generateColors();
+      displayedImages.value = []; // reset displayedImages
+      generateImages();
     };
 
-    const startColorChange = (index: number, delay: number) => {
-      setTimeout(() => {
-        gridItems.value[index].classList.add("animate-1");
-        gridItems.value[index].style.transform = "rotateY(90deg)";
+    const generateImages = async () => {
+      const xCount = Math.floor(window.innerWidth / itemSize.value);
+      const yCount = Math.floor(window.innerHeight / itemSize.value) + 1;
+      const count = xCount * yCount;
 
-        gridItems.value[index].addEventListener("transitionend", function callback() {
-          gridItems.value[index].removeEventListener("transitionend", callback);
 
-          gridItems.value[index].classList.remove("animate-1");
-          gridItems.value[index].classList.add("animate-2");
+      // Create an array with the correct length and fill it with empty strings
+      displayedImages.value = new Array(count).fill('');
 
-          const color = generateRandomColor();
-          gridItems.value[index].querySelector(".front").style.backgroundColor = color;
-          gridItems.value[index].querySelector(".back").style.backgroundColor = color;
-          gridItems.value[index].style.transform = "rotateY(0deg)";
+      let { data: images, error, count: totalImages } = await supabase
+        .from('coverurl')
+        .select('url', { count: 'exact' })
+        .range(0, count - 1);
+
+      for (let i = 0; i < images.length; i++) {
+        if (images[i]) {
+          displayedImages.value[i] = { id: i.toString(), url: images[i].url };
+        }
+      }
+
+
+      if (error) {
+        console.error('Error loading images:', error);
+        return;
+      }
+
+      for (let i = 0; i < images.length; i++) {
+        if (images[i]) {
+          displayedImages.value[i] = images[i].url; // assign the images to the corresponding positions
+        }
+      }
+
+      if (totalImages > count) {
+        let { data: remainingImages, error: remainingImagesError } = await supabase
+          .from('coverurl')
+          .select('url')
+          .range(count, totalImages - 1);
+
+        if (remainingImagesError) {
+          console.error('Error loading remaining images:', remainingImagesError);
+          return;
+        }
+
+        for (let i = 0; i < remainingImages.length; i++) {
+          if (remainingImages[i]) {
+            const image = new Image();
+            image.src = remainingImages[i].url;
+            image.onload = function() {
+              pendingImages.value.push(remainingImages[i].url);
+            };
+          }
+        }
+      }
+
+      // Generate images is completed, start the image change intervals
+      startImageChangeIntervals();
+    };
+
+    // const startImageChange = (index: number, delay: number) => {
+    //   const timeoutId = setTimeout(() => {
+    //     if (!gridItemRefs.value[index]) {
+    //       return;
+    //     }
+
+    //     gridItemRefs.value[index].classList.add("animate-1");
+    //     gridItemRefs.value[index].style.transform = "rotateY(90deg)";
+
+    //     gridItemRefs.value[index].addEventListener("transitionend", function callback() {
+    //       if (!gridItemRefs.value[index]) {
+    //         return;
+    //       }
+
+    //       gridItemRefs.value[index].removeEventListener("transitionend", callback);
+
+    //       gridItemRefs.value[index].classList.remove("animate-1");
+    //       gridItemRefs.value[index].classList.add("animate-2");
+
+    //       let imageUrl = '';
+
+    //       if (pendingImages.value.length === 0) {
+    //         pendingImages.value = [...displayedImages.value];
+    //         displayedImages.value = new Array(displayedImages.value.length).fill('');
+    //       }
+
+    //       imageUrl = pendingImages.value.shift();
+    //       displayedImages.value[index] = { id: displayedImages.value[index].id, url: imageUrl };
+
+    //       gridItemRefs.value[index].querySelector(".back").style.backgroundImage = `url(${imageUrl})`;
+    //       gridItemRefs.value[index].style.transform = "rotateY(0deg)";
+
+    //       setTimeout(() => {
+    //         gridItemRefs.value[index].classList.remove("animate-2");
+    //         // Add this line to update the front image to be the back image for the next flip
+    //         gridItemRefs.value[index].querySelector(".front").style.backgroundImage = `url(${imageUrl})`;
+    //       }, 1500);
+    //     });
+
+    //     const nextDelay = Math.random() * (displayedImages.value.length / 2) * 5000;
+    //     startImageChange(index, delay + nextDelay);
+    //   }, delay);
+
+    //   timeouts.value.push(timeoutId);
+    // };
+
+    const startImageChange = (index: number, delay: number) => {
+      const timeoutId = setTimeout(() => {
+        if (!gridItemRefs.value[index]) {
+          return;
+        }
+
+        let imageUrl = '';
+
+        if (pendingImages.value.length === 0) {
+          pendingImages.value = [...displayedImages.value];
+          displayedImages.value[index] = { id: displayedImages.value[index].id, url: '' };
+        }
+
+        imageUrl = pendingImages.value.shift();
+        displayedImages.value[index] = { id: displayedImages.value[index].id, url: imageUrl };
+
+        gridItemRefs.value[index].querySelector(".back").style.backgroundImage = `url(${imageUrl})`;
+
+        gridItemRefs.value[index].classList.add("animate-1");
+        gridItemRefs.value[index].style.transform = "rotateY(90deg)";
+
+        gridItemRefs.value[index].addEventListener("transitionend", function callback() {
+          if (!gridItemRefs.value[index]) {
+            return;
+          }
+
+          gridItemRefs.value[index].removeEventListener("transitionend", callback);
+
+          gridItemRefs.value[index].classList.remove("animate-1");
+          gridItemRefs.value[index].classList.add("animate-2");
+          
+          gridItemRefs.value[index].querySelector(".front").style.backgroundImage = `url(${imageUrl})`;
+          gridItemRefs.value[index].style.transform = "rotateY(0deg)";
 
           setTimeout(() => {
-            gridItems.value[index].classList.remove("animate-2");
+            gridItemRefs.value[index].classList.remove("animate-2");
           }, 1500);
         });
 
-        const nextDelay = Math.random() * (colors.value.length / 2) * 5000;
-        startColorChange(index, delay + nextDelay);
+        const nextDelay = Math.random() * (displayedImages.value.length / 2) * 5000;
+        startImageChange(index, delay + nextDelay);
       }, delay);
+
+      timeouts.value.push(timeoutId);
     };
 
 
-    const startColorIntervals = () => {
-      const count = colors.value.length;
+
+    const startImageChangeIntervals = () => {
+      const count = displayedImages.value.length;
       for (let i = 0; i < count; i++) {
         const delay = Math.random() * (count / 5) * 1000;
-        startColorChange(i, delay);
+        startImageChange(i, delay);
       }
     };
 
-    const stopColorIntervals = () => {
-      intervals.value.forEach((interval) => clearInterval(interval));
-      intervals.value = [];
+    const stopImageChangeIntervals = () => {
+      timeouts.value.forEach((timeoutId) => clearTimeout(timeoutId));
+      timeouts.value = [];
     };
 
     window.addEventListener("resize", updateSize);
 
+    onUpdated(async () => {
+      if (gridItems.value.length > 0 && displayedImages.value.length === gridItems.value.length) {
+        await nextTick();
+        startImageChangeIntervals();
+      }
+    });
+
     onMounted(() => {
       updateSize();
-      startColorIntervals();
     });
 
     onBeforeUnmount(() => {
       window.removeEventListener("resize", updateSize);
-      stopColorIntervals();
+      stopImageChangeIntervals();
     });
 
     return {
-      colors,
+      displayedImages,
       itemSize,
-      gridItems,
+      gridItemRefs,
+      gridItems
     };
   },
 };
 </script>
-
 
 <style scoped>
 body,
@@ -144,6 +260,7 @@ html {
   width: 100%;
   height: 100%;
   backface-visibility: hidden;
+  background-size: cover;
 }
 
 .front {
@@ -160,5 +277,12 @@ html {
 
 .animate-2 {
   transition: transform 1.5s cubic-bezier(.08,.63,.4,.91);
+  animation: shine 1.5s ease;
+}
+
+@keyframes shine {
+  0% { filter: brightness(1) }
+  10% { filter: brightness(1.5) }
+  100% { filter: brightness(1) }
 }
 </style>
