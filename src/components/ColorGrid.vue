@@ -14,7 +14,7 @@
 
 <script lang="ts">
 import { ref, onMounted, onBeforeUnmount, onUpdated, nextTick } from "vue";
-import supabase from "../supabase.js";
+import supabase from "../supabase.d.ts";
 
 export default {
   setup() {
