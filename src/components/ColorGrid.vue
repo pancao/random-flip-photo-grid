@@ -14,7 +14,7 @@
 
 <script lang="ts">
 import { ref, onMounted, onBeforeUnmount, onUpdated, nextTick } from "vue";
-import supabase from "../supabase.js";
+import supabase from "../supabase";
 
 export default {
   setup() {
@@ -22,8 +22,8 @@ export default {
     const pendingImages = ref<string[]>([]);
     const itemSize = ref(100);
     const gridItems = ref([]);
-    const gridItemRefs = ref([]);
-    const timeouts = ref<number[]>([]);
+    const gridItemRefs = ref<HTMLElement[]>([]);
+    const timeouts = ref<NodeJS.Timeout[]>([]);
 
     const updateSize = () => {
       let potentialSize = 320;
@@ -93,52 +93,7 @@ export default {
       startImageChangeIntervals();
     };
 
-    // const startImageChange = (index: number, delay: number) => {
-    //   const timeoutId = setTimeout(() => {
-    //     if (!gridItemRefs.value[index]) {
-    //       return;
-    //     }
-
-    //     gridItemRefs.value[index].classList.add("animate-1");
-    //     gridItemRefs.value[index].style.transform = "rotateY(90deg)";
-
-    //     gridItemRefs.value[index].addEventListener("transitionend", function callback() {
-    //       if (!gridItemRefs.value[index]) {
-    //         return;
-    //       }
-
-    //       gridItemRefs.value[index].removeEventListener("transitionend", callback);
-
-    //       gridItemRefs.value[index].classList.remove("animate-1");
-    //       gridItemRefs.value[index].classList.add("animate-2");
-
-    //       let imageUrl = '';
-
-    //       if (pendingImages.value.length === 0) {
-    //         pendingImages.value = [...displayedImages.value];
-    //         displayedImages.value = new Array(displayedImages.value.length).fill('');
-    //       }
-
-    //       imageUrl = pendingImages.value.shift();
-    //       displayedImages.value[index] = { id: displayedImages.value[index].id, url: imageUrl };
-
-    //       gridItemRefs.value[index].querySelector(".back").style.backgroundImage = `url(${imageUrl})`;
-    //       gridItemRefs.value[index].style.transform = "rotateY(0deg)";
-
-    //       setTimeout(() => {
-    //         gridItemRefs.value[index].classList.remove("animate-2");
-    //         // Add this line to update the front image to be the back image for the next flip
-    //         gridItemRefs.value[index].querySelector(".front").style.backgroundImage = `url(${imageUrl})`;
-    //       }, 1500);
-    //     });
-
-    //     const nextDelay = Math.random() * (displayedImages.value.length / 2) * 5000;
-    //     startImageChange(index, delay + nextDelay);
-    //   }, delay);
-
-    //   timeouts.value.push(timeoutId);
-    // };
-
+    
     const startImageChange = (index: number, delay: number) => {
       const timeoutId = setTimeout(() => {
         if (!gridItemRefs.value[index]) {
@@ -148,14 +103,18 @@ export default {
         let imageUrl = '';
 
         if (pendingImages.value.length === 0) {
-          pendingImages.value = [...displayedImages.value];
+          pendingImages.value = displayedImages.value.map(item => item.url);
           displayedImages.value[index] = { id: displayedImages.value[index].id, url: '' };
         }
 
-        imageUrl = pendingImages.value.shift();
+        imageUrl = pendingImages.value.shift() || '';
         displayedImages.value[index] = { id: displayedImages.value[index].id, url: imageUrl };
 
-        gridItemRefs.value[index].querySelector(".back").style.backgroundImage = `url(${imageUrl})`;
+        // You need to use `as HTMLElement` to make Typescript happy
+        const backElement = gridItemRefs.value[index].querySelector(".back") as HTMLElement;
+        const frontElement = gridItemRefs.value[index].querySelector(".front") as HTMLElement;
+        
+        backElement.style.backgroundImage = `url(${imageUrl})`;
 
         gridItemRefs.value[index].classList.add("animate-1");
         gridItemRefs.value[index].style.transform = "rotateY(90deg)";
@@ -170,7 +129,7 @@ export default {
           gridItemRefs.value[index].classList.remove("animate-1");
           gridItemRefs.value[index].classList.add("animate-2");
           
-          gridItemRefs.value[index].querySelector(".front").style.backgroundImage = `url(${imageUrl})`;
+          frontElement.style.backgroundImage = `url(${imageUrl})`;
           gridItemRefs.value[index].style.transform = "rotateY(0deg)";
 
           setTimeout(() => {
