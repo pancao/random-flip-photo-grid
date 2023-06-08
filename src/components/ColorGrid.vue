@@ -230,6 +230,9 @@ html {
 .grid-item {
   width: var(--item-size);
   height: var(--item-size);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
 }
 
 .front,
