@@ -135,7 +135,7 @@ export default {
 
         const timeoutId = setTimeout(() => {
           gridItemRefs.value[index].classList.add("animate-1");
-          gridItemRefs.value[index].style.transform = "rotateY(90deg) scale(0.9)";
+          gridItemRefs.value[index].style.transform = "rotateY(90deg) scale(0.8)";
 
           gridItemRefs.value[index].addEventListener("transitionend", function callback() {
             if (!gridItemRefs.value[index]) {
@@ -226,12 +226,13 @@ html {
   grid-auto-rows: var(--item-size);
   grid-gap: 0px;
   transform-style: preserve-3d;
+  perspective: 40000px;
+  border-radius: 100px;
 }
 
 .grid-item {
   width: var(--item-size);
   height: var(--item-size);
-  perspective: 400px;
 }
 
 .front,
@@ -242,6 +243,7 @@ html {
   backface-visibility: hidden;
   background-size: cover;
   perspective: 900px;
+  transform-origin: center;
 }
 
 .front {
