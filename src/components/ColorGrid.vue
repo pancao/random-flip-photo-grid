@@ -27,7 +27,7 @@ export default {
 
     const updateSize = () => {
       let potentialSize = 320;
-      while (window.innerWidth % potentialSize !== 0 && potentialSize >= 60) {
+      while (window.innerWidth % potentialSize !== 0 && potentialSize >= 100) {
         potentialSize--;
       }
       itemSize.value = potentialSize;
@@ -40,7 +40,6 @@ export default {
       const yCount = Math.floor(window.innerHeight / itemSize.value) + 1;
       const count = xCount * yCount;
 
-
       // Create an array with the correct length and fill it with empty strings
       displayedImages.value = new Array(count).fill('');
 
@@ -49,23 +48,28 @@ export default {
         .select('url', { count: 'exact' })
         .range(0, count - 1);
 
-      for (let i = 0; i < images.length; i++) {
-        if (images[i]) {
-          displayedImages.value[i] = { id: i.toString(), url: images[i].url };
-        }
-      }
-
-
       if (error) {
         console.error('Error loading images:', error);
         return;
       }
 
-      for (let i = 0; i < images.length; i++) {
-        if (images[i]) {
-          displayedImages.value[i] = images[i].url; // assign the images to the corresponding positions
+      // 使用 Promise.all 来等待所有图片加载完成
+      await Promise.all(images.map((image, index) => new Promise<void>(resolve => {
+        const img = new Image();
+        img.src = image.url;
+        img.onload = () => {
+          displayedImages.value[index] = { id: index.toString(), url: image.url };
+          resolve();
+        };
+      })));
+
+      // 当所有图片都加载完成后，给每一个元素添加 'fade-in' 类
+      displayedImages.value.forEach((image, index) => {
+        const gridItem = gridItemRefs.value[index];
+        if (gridItem) {
+          gridItem.classList.add('fade-in');
         }
-      }
+      });
 
       if (totalImages > count) {
         let { data: remainingImages, error: remainingImagesError } = await supabase
@@ -95,54 +99,59 @@ export default {
 
     
     const startImageChange = (index: number, delay: number) => {
-      const timeoutId = setTimeout(() => {
-        if (!gridItemRefs.value[index]) {
-          return;
-        }
+      if (!gridItemRefs.value[index]) {
+        return;
+      }
 
-        let imageUrl = '';
+      let imageUrl = '';
 
-        if (pendingImages.value.length === 0) {
-          pendingImages.value = displayedImages.value.map(item => item.url);
-          displayedImages.value[index] = { id: displayedImages.value[index].id, url: '' };
-        }
+      if (pendingImages.value.length === 0) {
+        pendingImages.value = displayedImages.value.map(item => item.url);
+        displayedImages.value[index] = { id: displayedImages.value[index].id, url: '' };
+      }
 
-        imageUrl = pendingImages.value.shift() || '';
+      imageUrl = pendingImages.value.shift() || '';
+
+      const image = new Image();
+      image.src = imageUrl;
+      image.onload = function() {
         displayedImages.value[index] = { id: displayedImages.value[index].id, url: imageUrl };
 
-        // You need to use `as HTMLElement` to make Typescript happy
         const backElement = gridItemRefs.value[index].querySelector(".back") as HTMLElement;
         const frontElement = gridItemRefs.value[index].querySelector(".front") as HTMLElement;
-        
+
         backElement.style.backgroundImage = `url(${imageUrl})`;
 
-        gridItemRefs.value[index].classList.add("animate-1");
-        gridItemRefs.value[index].style.transform = "rotateY(90deg)";
+        const timeoutId = setTimeout(() => {
+          gridItemRefs.value[index].classList.add("animate-1");
+          gridItemRefs.value[index].style.transform = "rotateY(90deg) scale(0.9)";
 
-        gridItemRefs.value[index].addEventListener("transitionend", function callback() {
-          if (!gridItemRefs.value[index]) {
-            return;
-          }
+          gridItemRefs.value[index].addEventListener("transitionend", function callback() {
+            if (!gridItemRefs.value[index]) {
+              return;
+            }
 
-          gridItemRefs.value[index].removeEventListener("transitionend", callback);
+            gridItemRefs.value[index].removeEventListener("transitionend", callback);
 
-          gridItemRefs.value[index].classList.remove("animate-1");
-          gridItemRefs.value[index].classList.add("animate-2");
+            gridItemRefs.value[index].classList.remove("animate-1");
+            gridItemRefs.value[index].classList.add("animate-2");
           
-          frontElement.style.backgroundImage = `url(${imageUrl})`;
-          gridItemRefs.value[index].style.transform = "rotateY(0deg)";
+            frontElement.style.backgroundImage = `url(${imageUrl})`;
+            gridItemRefs.value[index].style.transform = "rotateY(0deg) scale(1)";
 
-          setTimeout(() => {
-            gridItemRefs.value[index].classList.remove("animate-2");
-          }, 1500);
-        });
+            setTimeout(() => {
+              gridItemRefs.value[index].classList.remove("animate-2");
+            }, 1500);
+          });
 
-        const nextDelay = Math.random() * (displayedImages.value.length / 2) * 5000;
-        startImageChange(index, delay + nextDelay);
-      }, delay);
+          const nextDelay = Math.random() * (displayedImages.value.length / 2) * 5000;
+          startImageChange(index, delay + nextDelay);
+        }, delay);
 
-      timeouts.value.push(timeoutId);
+        timeouts.value.push(timeoutId);
+      };
     };
+
 
 
 
@@ -205,12 +214,13 @@ html {
   grid-template-columns: repeat(auto-fill, minmax(var(--item-size), 1fr));
   grid-auto-rows: var(--item-size);
   grid-gap: 0px;
+  transform-style: preserve-3d;
 }
 
 .grid-item {
   width: var(--item-size);
   height: var(--item-size);
-  transform-style: preserve-3d;
+  perspective: 400px;
 }
 
 .front,
@@ -220,6 +230,7 @@ html {
   height: 100%;
   backface-visibility: hidden;
   background-size: cover;
+  perspective: 900px;
 }
 
 .front {
@@ -239,9 +250,25 @@ html {
   animation: shine 1.5s ease;
 }
 
+.fade-in {
+  animation: fade-in 3s linear forwards;
+  opacity: 0;
+}
+
 @keyframes shine {
-  0% { filter: brightness(1) }
-  10% { filter: brightness(1.5) }
-  100% { filter: brightness(1) }
+  0% { 
+    filter: brightness(1);
+  }
+  10% { 
+    filter: brightness(1.5);
+  }
+  100% { 
+    filter: brightness(1);
+  }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0 }
+  100% { opacity: 1 }
 }
 </style>
