@@ -225,9 +225,6 @@ html {
   grid-template-columns: repeat(auto-fill, minmax(var(--item-size), 1fr));
   grid-auto-rows: var(--item-size);
   grid-gap: 0px;
-  transform-style: preserve-3d;
-  perspective: 40000px;
-  border-radius: 100px;
 }
 
 .grid-item {
@@ -242,8 +239,6 @@ html {
   height: 100%;
   backface-visibility: hidden;
   background-size: cover;
-  perspective: 900px;
-  transform-origin: center;
 }
 
 .front {
