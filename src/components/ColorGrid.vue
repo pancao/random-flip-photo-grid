@@ -53,23 +53,33 @@ export default {
         return;
       }
 
-      // 使用 Promise.all 来等待所有图片加载完成
-      await Promise.all(images.map((image, index) => new Promise<void>(resolve => {
-        const img = new Image();
-        img.src = image.url;
-        img.onload = () => {
-          displayedImages.value[index] = { id: index.toString(), url: image.url };
-          resolve();
-        };
-      })));
-
-      // 当所有图片都加载完成后，给每一个元素添加 'fade-in' 类
-      displayedImages.value.forEach((image, index) => {
-        const gridItem = gridItemRefs.value[index];
-        if (gridItem) {
-          gridItem.classList.add('fade-in');
+      const loadPromises = images.map((image, i) => {
+        if (image) {
+          return new Promise<void>((resolve) => {
+            const img = new Image();
+            img.src = image.url;
+            img.onload = () => {
+              displayedImages.value[i] = { id: i.toString(), url: image.url };
+              resolve();
+            };
+            img.onerror = () => {
+              console.error(`Failed to load image at ${image.url}`);
+              resolve();  // even if image loading failed, resolve this promise
+            };
+          });
         }
+        return Promise.resolve();
       });
+
+      const timeoutPromise = new Promise<void>((resolve) => {
+        const id = setTimeout(() => {
+          clearTimeout(id);
+          resolve();  // resolve this promise after timeout
+        }, 10000);  
+      });
+
+
+      await Promise.race([Promise.all(loadPromises), timeoutPromise]);
 
       if (totalImages > count) {
         let { data: remainingImages, error: remainingImagesError } = await supabase
@@ -96,6 +106,7 @@ export default {
       // Generate images is completed, start the image change intervals
       startImageChangeIntervals();
     };
+
 
     
     const startImageChange = (index: number, delay: number) => {
